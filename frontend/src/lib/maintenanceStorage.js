@@ -24,6 +24,13 @@ function toISODateString(date){
 
 // demo data: include assignedTo, completedDate where applicable
 export function loadRequests() {
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if(raw){
+      return JSON.parse(raw)
+    }
+  }catch(e){ console.error('loadRequests parse',e) }
+
   return [
     {
       id: 1,

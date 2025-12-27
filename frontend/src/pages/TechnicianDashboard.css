@@ -21,7 +21,10 @@
 .task-row{display:flex;justify-content:space-between;padding:10px;border-bottom:1px solid #f3f4f6}
 .task-row .meta{color:#667085;font-size:13px}
 .overdue{border:1px solid #ffdede;background:#fff6f6;border-radius:6px;padding:10px;margin-bottom:8px}
+.overdue-badge{background:#fee2e2;color:#b91c1c;padding:6px 8px;border-radius:6px;font-weight:600;margin-top:6px}
 .calendar-panel{border:1px solid #eef2ff;border-radius:8px;padding:12px;background:#fbfdff}
 .date-btn{display:block;text-align:left;padding:8px;border-radius:6px;border:1px solid transparent;background:transparent;cursor:pointer}
 .date-btn:hover{background:#f1f5f9}
 .task-list-item{padding:6px;border-bottom:1px solid #f3f4f6}
+.historical-record{background:#fbfcfd;border:1px solid #e6eef6;border-radius:6px;padding:10px;margin-bottom:8px}
+.historical-record .meta{color:#475569;font-size:13px}

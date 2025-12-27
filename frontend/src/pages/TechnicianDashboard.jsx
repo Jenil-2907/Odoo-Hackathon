@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useMemo, useState, useEffect } from "react";
-import { loadRequests, loadAssignedRequests, isOverdueISO, isUpcomingISO, isCompletedPastISO, daysOverdue, todayISO } from "../lib/maintenanceStorage";
+import { loadRequests, loadRequestsSafe, loadAssignedRequests, isOverdueISO, isUpcomingISO, isCompletedPastISO, daysOverdue, todayISO } from "../lib/maintenanceStorage";
 import PreventiveCalendar from "./Calendar/PreventiveCalendar";
 import { formatISOToDMY } from '../utils/dateUtils'
 import "./TechnicianDashboard.css";
@@ -18,11 +18,23 @@ export default function TechnicianDashboard() {
     }
   }, [role, navigate])
 
-  // Load all requests (shared storage)
-  // use safe loader so demo overdue entries exist when needed
-  const allRequests = useMemo(() => (typeof loadRequestsSafe === 'function' ? loadRequestsSafe() : loadRequests()), []);
-  // load only assigned requests (normalized shape)
-  const assignedRequests = useMemo(() => loadAssignedRequests(technicianEmail), [technicianEmail]);
+  // Load all requests (shared storage) into state so we can refresh on events
+  const [allRequests, setAllRequests] = useState(() => (typeof loadRequestsSafe === 'function' ? loadRequestsSafe() : loadRequests()));
+  // load only assigned requests (normalized shape) into state
+  const [assignedRequests, setAssignedRequests] = useState(() => loadAssignedRequests(technicianEmail));
+
+  // Refresh requests when other components update them (e.g. Start Work, Mark Repaired)
+  useEffect(() => {
+    const handler = () => {
+      try{
+        const freshAll = typeof loadRequestsSafe === 'function' ? loadRequestsSafe() : loadRequests()
+        setAllRequests(freshAll)
+        setAssignedRequests(loadAssignedRequests(technicianEmail))
+      }catch(e){ console.error('refresh requests', e) }
+    }
+    window.addEventListener('requestsUpdated', handler)
+    return () => window.removeEventListener('requestsUpdated', handler)
+  }, [technicianEmail])
 
   const today = new Date();
   const todayStr = todayISO()
@@ -47,8 +59,8 @@ export default function TechnicianDashboard() {
   const correctiveUpcoming = upcomingRequests.filter(r => r.requestType === 'Corrective')
   const preventiveUpcomingAssigned = upcomingRequests.filter(r => r.requestType === 'Preventive')
 
-  // Completed: status === 'Repaired' and completedDate < today
-  const completedRequests = assignedRequests.filter(r => r.status === 'Repaired' && isCompletedPastISO(r.completedDate))
+  // Completed: include all requests with status === 'Repaired' (historical)
+  const completedRequests = assignedRequests.filter(r => r.status === 'Repaired')
 
   // -----------------------------
   // 3️⃣ PREVENTIVE (GENERAL / UNASSIGNED)
@@ -113,7 +125,7 @@ export default function TechnicianDashboard() {
                   {correctiveUpcoming.length === 0 ? <div style={{ color: '#666' }}>No corrective tasks.</div> : (
                     <div>
                             {correctiveUpcoming.map(r => (
-                              <div key={r.id} className="task-row">
+                              <div key={r.id} className="task-row" onClick={() => navigate(`/maintenance/${r.id}`)} style={{ cursor: 'pointer' }}>
                                 <div>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                     <div style={{ fontWeight: 700 }}>{r.equipmentName}</div>
@@ -136,7 +148,7 @@ export default function TechnicianDashboard() {
                   {preventiveUpcomingAssigned.length === 0 ? <div style={{ color: '#666' }}>No preventive tasks.</div> : (
                     <div>
                       {preventiveUpcomingAssigned.map(r => (
-                        <div key={r.id} className="task-row">
+                        <div key={r.id} className="task-row" onClick={() => navigate(`/maintenance/${r.id}`)} style={{ cursor: 'pointer' }}>
                           <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <div style={{ fontWeight: 700 }}>{r.equipmentName}</div>
@@ -164,7 +176,7 @@ export default function TechnicianDashboard() {
             ) : (
               <div>
                 {overdueRequests.map(r => (
-                  <div key={r.id} className="overdue">
+                  <div key={r.id} className="overdue" onClick={() => navigate(`/maintenance/${r.id}`)} style={{ cursor: 'pointer' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                         <div style={{ width: 10, height: 10, borderRadius: 10, background: '#b91c1c' }} title="Overdue" />
@@ -177,6 +189,7 @@ export default function TechnicianDashboard() {
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontWeight: 600, color: 'red' }}>{r.status}</div>
                         <div style={{ fontSize: 12, color: '#900' }}>{daysOverdue(r.scheduledDate)} days overdue</div>
+                        <div className="overdue-badge">{daysOverdue(r.scheduledDate)} day(s) overdue</div>
                       </div>
                     </div>
                   </div>
@@ -193,15 +206,16 @@ export default function TechnicianDashboard() {
             ) : (
               <div>
                 {completedRequests.map(r => (
-                  <div key={r.id} className="task-row">
-                    <div>
-                      <div style={{ fontWeight: 700 }}>{r.equipmentName}</div>
-                      <div style={{ fontSize: 13, color: '#666' }}>{r.requestType}</div>
-                      {r.subject && <div style={{ fontSize: 12, color: '#888' }}>{r.subject}</div>}
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div>{formatISOToDMY(r.completedDate)}</div>
-                      {r.durationMinutes && <div style={{ fontSize: 12, color: '#666' }}>{Math.round(r.durationMinutes/60)}h {r.durationMinutes%60}m</div>}
+                  <div key={r.id} className="historical-record" onClick={() => navigate(`/maintenance/${r.id}`)} style={{ cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 700 }}>{r.equipmentName}</div>
+                        <div className="meta">{r.requestType}{r.subject ? ` — ${r.subject}` : ''}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div>{formatISOToDMY(r.completedDate)}</div>
+                        {r.durationMinutes && <div style={{ fontSize: 12, color: '#666' }}>{Math.round(r.durationMinutes/60)}h {r.durationMinutes%60}m</div>}
+                      </div>
                     </div>
                   </div>
                 ))}
