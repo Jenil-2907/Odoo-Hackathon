@@ -1,3 +1,10 @@
+-- 1. Create the independent table 
+CREATE TABLE teams (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL
+);
+
+-- 2. Create the dependent table with newly added foreign key
 CREATE TABLE users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
@@ -5,14 +12,10 @@ CREATE TABLE users (
   password VARCHAR(255) NOT NULL,
   role ENUM('manager', 'technician', 'user') NOT NULL,
   team_id INT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  -- Foreign Key added here
+  CONSTRAINT fk_user_team FOREIGN KEY (team_id) REFERENCES teams(id)
 );
-
-CREATE TABLE teams (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(100) NOT NULL
-);
-
 CREATE TABLE equipment (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
