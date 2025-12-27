@@ -1,5 +1,7 @@
-console.log("✅ users routes loaded");
 import express from "express";
+import { authenticate } from "../middlewares/auth.middleware.js";
+import { authorize } from "../middlewares/role.middleware.js";
+
 import {
   signupUser,
   loginUser,
@@ -10,6 +12,11 @@ const userRouter = express.Router();
 
 userRouter.post("/signup", signupUser);
 userRouter.post("/login", loginUser);
-userRouter.get("/technicians", getTechnicians);
+userRouter.get(
+  "/technicians",
+  authenticate,
+  authorize("manager"),
+  getTechnicians
+);
 
 export default userRouter;

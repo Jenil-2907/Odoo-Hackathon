@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import ApiError from "../utils/ApiError.js";
 import ApiResponse from "../utils/ApiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import jwt from "jsonwebtoken";
 
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[\W_]).{8,}$/;
 
@@ -81,15 +82,28 @@ export const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid Password");
   }
 
+  const token = jwt.sign(
+    {
+      id: user.id,
+      role: user.role,
+      team_id: user.team_id,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: "1d" }
+  );
+
   res.status(200).json(
     new ApiResponse(
       200,
       {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        team_id: user.team_id,
+        token,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          team_id: user.team_id,
+        },
       },
       "Login successful"
     )
