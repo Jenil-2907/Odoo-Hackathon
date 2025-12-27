@@ -1,3 +1,4 @@
+import "dotenv/config";
 import mysql from "mysql2/promise";
 
 // Create a connection pool (recommended for production)

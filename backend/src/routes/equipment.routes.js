@@ -6,11 +6,11 @@ import {
   scrapEquipment,
 } from "../controllers/equipment.controller.js";
 
-const router = express.Router();
+const equipmentRouter = express.Router();
 
-router.post("/", createEquipment);
-router.get("/", getAllEquipment);
-router.get("/:id", getEquipmentById);
-router.patch("/:id/scrap", scrapEquipment);
+equipmentRouter.post("/", createEquipment);
+equipmentRouter.get("/", getAllEquipment);
+equipmentRouter.get("/:id", getEquipmentById);
+equipmentRouter.patch("/:id/scrap", scrapEquipment);
 
-export default router;
+export default equipmentRouter;

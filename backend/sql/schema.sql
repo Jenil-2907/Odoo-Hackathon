@@ -1,7 +1,3 @@
-CREATE DATABASE IF NOT EXISTS hackathon_db;
-USE hackathon_db;
-
--- USERS (manager / technician / user)
 CREATE TABLE users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
@@ -12,13 +8,11 @@ CREATE TABLE users (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- TEAMS
 CREATE TABLE teams (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL
 );
 
--- EQUIPMENT
 CREATE TABLE equipment (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
@@ -31,7 +25,6 @@ CREATE TABLE equipment (
   FOREIGN KEY (maintenance_team_id) REFERENCES teams(id)
 );
 
--- MAINTENANCE REQUESTS
 CREATE TABLE maintenance_requests (
   id INT AUTO_INCREMENT PRIMARY KEY,
   subject VARCHAR(255) NOT NULL,
