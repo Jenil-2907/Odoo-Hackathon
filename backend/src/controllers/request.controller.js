@@ -14,8 +14,7 @@ export const createRequest = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Required fields are missing");
   }
 
-  // 🔴 Auto-fill logic (Equipment → Team)
-  // NOTE: This will work once equipment table exists
+  //  Auto-fill logic (Equipment → Team)
   const [[equipment]] = await pool.query(
     `SELECT maintenance_team_id FROM equipment WHERE id = ?`,
     [equipmentId]
