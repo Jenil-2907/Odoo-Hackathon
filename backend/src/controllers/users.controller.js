@@ -3,7 +3,6 @@ import bcrypt from "bcryptjs";
 import ApiError from "../utils/ApiError.js";
 import ApiResponse from "../utils/ApiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
-import jwt from "jsonwebtoken";
 
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[\W_]).{8,}$/;
 
@@ -11,17 +10,20 @@ const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[\W_]).{8,}$/;
  * SIGNUP
  */
 export const signupUser = asyncHandler(async (req, res) => {
-  const { name, email, password, role, teamId } = req.body;
+  const { name, email, password, role, teamId, teamName } = req.body;
 
+  // Validate required fields
   if (!name || !email || !password || !role) {
     throw new ApiError(400, "All fields are required");
   }
 
+  // Validate role
   const allowedRoles = ["manager", "technician", "user"];
   if (!allowedRoles.includes(role)) {
     throw new ApiError(400, "Invalid role");
   }
 
+  //  Validate password strength
   if (!passwordRegex.test(password)) {
     throw new ApiError(
       400,
@@ -29,33 +31,68 @@ export const signupUser = asyncHandler(async (req, res) => {
     );
   }
 
-  // Check email uniqueness
+  //  Check email uniqueness
   const [[existingUser]] = await pool.query(
     `SELECT id FROM users WHERE email = ?`,
     [email]
   );
-
   if (existingUser) {
     throw new ApiError(409, "Email already exists");
   }
 
+  let assignedTeamId = teamId || null;
+
+  //  Technician team assignment
+  if (role === "technician") {
+    if (!assignedTeamId) {
+      if (!teamName) {
+        throw new ApiError(
+          400,
+          "Team assignment is required for technician. Contact your manager."
+        );
+      }
+
+      // Check if the team exists
+      const [[team]] = await pool.query(
+        `SELECT id FROM teams WHERE name = ?`,
+        [teamName]
+      );
+
+      if (!team) {
+        throw new ApiError(
+          400,
+          "Specified team does not exist. Contact your manager to assign a team."
+        );
+      }
+
+      assignedTeamId = team.id;
+    }
+  }
+
+  //  Hash password
   const hashedPassword = await bcrypt.hash(password, 10);
 
+  //  Insert user into database
   const [result] = await pool.query(
     `INSERT INTO users (name, email, password, role, team_id)
      VALUES (?, ?, ?, ?, ?)`,
-    [name, email, hashedPassword, role, teamId || null]
+    [name, email, hashedPassword, role, assignedTeamId]
   );
 
-  res
-    .status(201)
-    .json(
-      new ApiResponse(
-        201,
-        { id: result.insertId, name, email, role },
-        "Signup successful"
-      )
-    );
+  // Send response
+  res.status(201).json(
+    new ApiResponse(
+      201,
+      {
+        id: result.insertId,
+        name,
+        email,
+        role,
+        team_id: assignedTeamId,
+      },
+      "Signup successful"
+    )
+  );
 });
 
 /**
@@ -82,28 +119,15 @@ export const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid Password");
   }
 
-  const token = jwt.sign(
-    {
-      id: user.id,
-      role: user.role,
-      team_id: user.team_id,
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: "1d" }
-  );
-
   res.status(200).json(
     new ApiResponse(
       200,
       {
-        token,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          team_id: user.team_id,
-        },
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        team_id: user.team_id,
       },
       "Login successful"
     )
@@ -120,3 +144,4 @@ export const getTechnicians = asyncHandler(async (req, res) => {
 
   res.status(200).json(new ApiResponse(200, rows));
 });
+
