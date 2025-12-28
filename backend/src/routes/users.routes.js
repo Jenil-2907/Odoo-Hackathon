@@ -6,6 +6,7 @@ import {
   signupUser,
   loginUser,
   getTechnicians,
+  createTechnician,
 } from "../controllers/users.controller.js";
 
 const userRouter = express.Router();
@@ -17,6 +18,12 @@ userRouter.get(
   authenticate,
   authorize("manager"),
   getTechnicians
+);
+userRouter.post(
+  "/technicians",
+  authenticate,
+  authorize("manager"),
+  createTechnician
 );
 
 export default userRouter;

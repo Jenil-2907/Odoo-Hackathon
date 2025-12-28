@@ -5,7 +5,7 @@ export const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    throw new ApiError(401, "Unauthorized");
+    throw new ApiError(401, "Authorization token missing");
   }
 
   const token = authHeader.split(" ")[1];
