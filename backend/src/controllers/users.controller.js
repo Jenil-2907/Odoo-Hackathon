@@ -3,27 +3,27 @@ import bcrypt from "bcryptjs";
 import ApiError from "../utils/ApiError.js";
 import ApiResponse from "../utils/ApiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  hashToken,
+} from "../utils/token.js";
 
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[\W_]).{8,}$/;
 
 /**
- * SIGNUP
+ * SIGNUP (USER ONLY)
  */
 export const signupUser = asyncHandler(async (req, res) => {
-  const { name, email, password, role, teamId, teamName } = req.body;
+  const { name, email, password } = req.body;
 
-  // Validate required fields
-  if (!name || !email || !password || !role) {
+  if (!name || !email || !password) {
     throw new ApiError(400, "All fields are required");
   }
 
-  // Validate role
-  const allowedRoles = ["manager", "technician", "user"];
-  if (!allowedRoles.includes(role)) {
-    throw new ApiError(400, "Invalid role");
-  }
+  // Enforce USER role only
+  const role = "user";
 
-  //  Validate password strength
   if (!passwordRegex.test(password)) {
     throw new ApiError(
       400,
@@ -31,55 +31,23 @@ export const signupUser = asyncHandler(async (req, res) => {
     );
   }
 
-  //  Check email uniqueness
   const [[existingUser]] = await pool.query(
     `SELECT id FROM users WHERE email = ?`,
     [email]
   );
+
   if (existingUser) {
     throw new ApiError(409, "Email already exists");
   }
 
-  let assignedTeamId = teamId || null;
-
-  //  Technician team assignment
-  if (role === "technician") {
-    if (!assignedTeamId) {
-      if (!teamName) {
-        throw new ApiError(
-          400,
-          "Team assignment is required for technician. Contact your manager."
-        );
-      }
-
-      // Check if the team exists
-      const [[team]] = await pool.query(
-        `SELECT id FROM teams WHERE name = ?`,
-        [teamName]
-      );
-
-      if (!team) {
-        throw new ApiError(
-          400,
-          "Specified team does not exist. Contact your manager to assign a team."
-        );
-      }
-
-      assignedTeamId = team.id;
-    }
-  }
-
-  //  Hash password
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  //  Insert user into database
   const [result] = await pool.query(
-    `INSERT INTO users (name, email, password, role, team_id)
-     VALUES (?, ?, ?, ?, ?)`,
-    [name, email, hashedPassword, role, assignedTeamId]
+    `INSERT INTO users (name, email, password, role)
+     VALUES (?, ?, ?, ?)`,
+    [name, email, hashedPassword, role]
   );
 
-  // Send response
   res.status(201).json(
     new ApiResponse(
       201,
@@ -88,7 +56,6 @@ export const signupUser = asyncHandler(async (req, res) => {
         name,
         email,
         role,
-        team_id: assignedTeamId,
       },
       "Signup successful"
     )
@@ -105,29 +72,41 @@ export const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Email and password are required");
   }
 
-  const [[user]] = await pool.query(`SELECT * FROM users WHERE email = ?`, [
+  const [[user]] = await pool.query("SELECT * FROM users WHERE email = ?", [
     email,
   ]);
 
   if (!user) {
-    throw new ApiError(404, "Account not exist");
+    throw new ApiError(404, "Account does not exist");
   }
 
   const isMatch = await bcrypt.compare(password, user.password);
 
   if (!isMatch) {
-    throw new ApiError(401, "Invalid Password");
+    throw new ApiError(401, "Invalid password");
   }
+
+  const accessToken = generateAccessToken(user);
+  const refreshToken = generateRefreshToken();
+
+  await pool.query(
+    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+     VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 14 DAY))`,
+    [user.id, hashToken(refreshToken)]
+  );
 
   res.status(200).json(
     new ApiResponse(
       200,
       {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        team_id: user.team_id,
+        accessToken,
+        refreshToken,
+        user: {
+          id: user.id,
+          name: user.name,
+          role: user.role,
+          team_id: user.team_id,
+        },
       },
       "Login successful"
     )
@@ -135,7 +114,7 @@ export const loginUser = asyncHandler(async (req, res) => {
 });
 
 /**
- * GET TECHNICIANS
+ * GET TECHNICIANS (Manager only via middleware)
  */
 export const getTechnicians = asyncHandler(async (req, res) => {
   const [rows] = await pool.query(
@@ -145,3 +124,168 @@ export const getTechnicians = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, rows));
 });
 
+/**
+ * Manager creates technician
+ */
+export const createTechnician = asyncHandler(async (req, res) => {
+  const { name, email, password, teamId } = req.body;
+
+  if (!name || !email || !password || !teamId) {
+    throw new ApiError(400, "All fields are required");
+  }
+
+  const [[team]] = await pool.query("SELECT id FROM teams WHERE id = ?", [
+    teamId,
+  ]);
+
+  if (!team) {
+    throw new ApiError(404, "Team not found");
+  }
+
+  const [[existing]] = await pool.query(
+    "SELECT id FROM users WHERE email = ?",
+    [email]
+  );
+
+  if (existing) {
+    throw new ApiError(409, "Email already exists");
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const [result] = await pool.query(
+    `INSERT INTO users (name, email, password, role, team_id)
+     VALUES (?, ?, ?, 'technician', ?)`,
+    [name, email, hashedPassword, teamId]
+  );
+
+  res.status(201).json(
+    new ApiResponse(
+      201,
+      {
+        id: result.insertId,
+        name,
+        email,
+        role: "technician",
+        team_id: teamId,
+      },
+      "Technician created successfully"
+    )
+  );
+});
+
+/**
+ * Manager creates another manager (WITH TEAM)
+ */
+export const createManager = asyncHandler(async (req, res) => {
+  const { name, email, password, teamId } = req.body;
+
+  if (!name || !email || !password || !teamId) {
+    throw new ApiError(400, "All fields are required");
+  }
+
+  // Check team exists
+  const [[team]] = await pool.query("SELECT id FROM teams WHERE id = ?", [
+    teamId,
+  ]);
+
+  if (!team) {
+    throw new ApiError(404, "Team not found");
+  }
+
+  // Check email
+  const [[existing]] = await pool.query(
+    "SELECT id FROM users WHERE email = ?",
+    [email]
+  );
+
+  if (existing) {
+    throw new ApiError(409, "Email already exists");
+  }
+
+  if (!passwordRegex.test(password)) {
+    throw new ApiError(
+      400,
+      "Password must contain lowercase, uppercase, special character and be at least 8 characters long"
+    );
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const [result] = await pool.query(
+    `INSERT INTO users (name, email, password, role, team_id)
+     VALUES (?, ?, ?, 'manager', ?)`,
+    [name, email, hashedPassword, teamId]
+  );
+
+  res.status(201).json(
+    new ApiResponse(
+      201,
+      {
+        id: result.insertId,
+        name,
+        email,
+        role: "manager",
+        team_id: teamId,
+      },
+      "Manager created successfully"
+    )
+  );
+});
+
+/**
+ * REFRESH ACCESS TOKEN
+ */
+export const refreshAccessToken = asyncHandler(async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    throw new ApiError(400, "Refresh token required");
+  }
+
+  const hashed = hashToken(refreshToken);
+
+  const [[stored]] = await pool.query(
+    `SELECT * FROM refresh_tokens
+     WHERE token_hash = ? AND expires_at > NOW()`,
+    [hashed]
+  );
+
+  if (!stored) {
+    throw new ApiError(401, "Invalid or expired refresh token");
+  }
+
+  const [[user]] = await pool.query(
+    `SELECT id, role, team_id FROM users WHERE id = ?`,
+    [stored.user_id]
+  );
+
+  const newAccessToken = generateAccessToken(user);
+
+  res.status(200).json(new ApiResponse(200, { accessToken: newAccessToken }));
+});
+
+/**
+ * LOGOUT
+ */
+export const logoutUser = asyncHandler(async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (refreshToken) {
+    await pool.query(`DELETE FROM refresh_tokens WHERE token_hash = ?`, [
+      hashToken(refreshToken),
+    ]);
+  }
+
+  res.status(200).json(new ApiResponse(200, null, "Logged out successfully"));
+});
+
+// export {
+//   signupUser,
+//   loginUser,
+//   getTechnicians,
+//   createTechnician,
+//   createManager, // 👈 ADD THIS
+//   refreshAccessToken,
+//   logoutUser,
+// };

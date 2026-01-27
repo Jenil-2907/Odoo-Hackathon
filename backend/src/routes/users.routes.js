@@ -12,8 +12,7 @@ const userRouter = express.Router();
 
 userRouter.post("/signup", signupUser);
 userRouter.post("/login", loginUser);
-userRouter.get(
-  "/technicians",
+userRouter.get("/technicians",
   authenticate,
   authorize("manager"),
   getTechnicians

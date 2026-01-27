@@ -7,12 +7,12 @@ const PORT = process.env.PORT || 5000;
 (async () => {
   try {
     await testDBConnection();
-    console.log("✅ MySQL connected successfully");
+    console.log(" MySQL connected successfully");
   } catch (err) {
-    console.error("❌ MySQL connection failed:", err.message);
+    console.error(" MySQL connection failed:", err.message);
   }
 })();
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(` Server running on port ${PORT}`);
 });
